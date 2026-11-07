@@ -60,9 +60,10 @@ static VkSurfaceTransformFlagBitsKHR g_pre = VK_SURFACE_TRANSFORM_IDENTITY_BIT_K
 static VkImageView g_sview[MAXIMG];   // the swapchain images as colour attachments (pre-rotation and FSR only)
 static int g_sview_fsr;   // this swapchain made its views for FSR: a missing view then failed, and a new swapchain would not have it either
 static int g_fps_set; static unsigned g_refresh_n;
-static _Atomic int g_place_x = 5000, g_place_y = 5000;   // nxhost_picture_place, in 1/10000 of the free space
+static _Atomic int g_place_x = 5000, g_place_y = 5000;   // nxhost_picture_place, in 1/10000 of the free space (< 0 = full-screen stretch)
 void nxhost_picture_place(float x, float y) {
-    x = x < 0 ? 0 : x > 1 ? 1 : x; y = y < 0 ? 0 : y > 1 ? 1 : y;
+    if (x < 0 || y < 0) { g_place_x = -10000; g_place_y = -10000; return; }
+    x = x > 1 ? 1 : x; y = y > 1 ? 1 : y;
     g_place_x = (int)(x * 10000 + 0.5f); g_place_y = (int)(y * 10000 + 0.5f);
 }
 
@@ -358,7 +359,8 @@ static int swap_create(void) {
     if (ww > 0 && wh > 0) ext = rot_quarter(pre) ? (VkExtent2D){(uint32_t)wh, (uint32_t)ww} : (VkExtent2D){(uint32_t)ww, (uint32_t)wh};
     else if (rot && !rot_quarter(pre)) ext = (VkExtent2D){ext.height, ext.width};
     if (!ext.width || !ext.height) return 0;
-    uint32_t n = caps.minImageCount < 3 ? 3 : caps.minImageCount; if (caps.maxImageCount && n > caps.maxImageCount) n = caps.maxImageCount; if (n > MAXIMG) n = MAXIMG;
+    uint32_t min_img = VKA_ENV("DM_VK_DOUBLE_BUFFER", 1) ? 2 : 3;
+    uint32_t n = caps.minImageCount < min_img ? min_img : caps.minImageCount; if (caps.maxImageCount && n > caps.maxImageCount) n = caps.maxImageCount; if (n > MAXIMG) n = MAXIMG;
     VkCompositeAlphaFlagBitsKHR ca = caps.supportedCompositeAlpha & VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR ? VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR :
                                      caps.supportedCompositeAlpha & VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR ? VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR : (VkCompositeAlphaFlagBitsKHR)(caps.supportedCompositeAlpha & -caps.supportedCompositeAlpha);
     VkSwapchainKHR old = g_swap;
@@ -504,8 +506,12 @@ static int present_one(const pq_item *it) {
     if (it->has_crop && it->crop[2] > 0 && it->crop[3] > 0) { cx = it->crop[0]; cy = it->crop[1]; cw = it->crop[2]; ch = it->crop[3]; }
     int ew = (int)(rot_quarter(g_pre) ? g_ext.height : g_ext.width), eh = (int)(rot_quarter(g_pre) ? g_ext.width : g_ext.height);   // the display, as the user sees it
     double s = (double)ew / cw < (double)eh / ch ? (double)ew / cw : (double)eh / ch;
-    int dw = (int)(cw * s + 0.5), dh = (int)(ch * s + 0.5), dx = (int)((long)(ew - dw) * g_place_x / 10000), dy = (int)((long)(eh - dh) * g_place_y / 10000);   // nxhost_picture_place
-    VkFormatProperties fp = {0}; if (im) vk.vkGetPhysicalDeviceFormatProperties(V.pd, im->f.vk, &fp);
+    int stretch = g_place_x < 0 || g_place_y < 0 || VKA_ENV("DM_STRETCH", 0);
+    int dw = stretch ? ew : (int)(cw * s + 0.5), dh = stretch ? eh : (int)(ch * s + 0.5);
+    int dx = stretch ? 0 : (int)((long)(ew - dw) * g_place_x / 10000), dy = stretch ? 0 : (int)((long)(eh - dh) * g_place_y / 10000);   // nxhost_picture_place
+    static VkFormat s_last_fmt; static VkFormatProperties s_last_fp;
+    VkFormatProperties fp = {0};
+    if (im) { if (im->f.vk != s_last_fmt) { vk.vkGetPhysicalDeviceFormatProperties(V.pd, im->f.vk, &s_last_fp); s_last_fmt = im->f.vk; } fp = s_last_fp; }
     int blit = im && im->inited && im->aspect == VK_IMAGE_ASPECT_COLOR_BIT && im->f.kind == 0 && im->samples == 1 && (fp.optimalTilingFeatures & VK_FORMAT_FEATURE_BLIT_SRC_BIT);
     // FSR in place of the blit or the rotated copy for a picture scaled up; switched on live, the swapchain has no attachment views yet: blitted once, and the next swapchain has them.
     // A view that failed on a swapchain made for FSR is not asked for again: each present would make a new swapchain (a queue idle) and fail the same way

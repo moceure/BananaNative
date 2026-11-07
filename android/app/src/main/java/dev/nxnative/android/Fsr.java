@@ -30,6 +30,40 @@ final class Fsr {
     static void env(Context c, List<String> env) {
         env.add("DM_VK_FSR=" + (on(c) ? 1 : 0));
         env.add("DM_VK_FSR_SHARP=" + sharp(c));
+        env.add("DM_VK_BAR_KEEP=1");
+        env.add("DM_VK_PUSH_DELTA=1");
+        env.add("DM_VK_DYN_FILTER=1");
+        env.add("DM_VK_VB_FILTER=1");
+        env.add("DM_VK_DRV_MEMO=1");
+        env.add("DM_VK_TEX_MEMO=1");
+        env.add("DM_VK_PLACE_PART_MB=64");
+        env.add("DM_VK_PLACE_GRANULE_MB=16");
+        env.add("DM_VK_PLACE_LAZY=1");
+        env.add("DM_VK_PSO_ASYNC=2");
+        env.add("DM_VK_PREWARM=4");
+        env.add("DM_NVN_GPU_TS=segment");
+        env.add("DM_VK_GPU_FLOOR=100");
+        env.add("DM_VK_GPU_FLOOR_KGSL=1");
+        env.add("DM_VK_GPU_FLOOR_ADPF=1");
+        env.add("DM_VK_ENC_BATCH=16384");
+        env.add("DM_VK_UPLOAD_MT=4");
+        env.add("DM_VK_SPARSE_DENSE_MB=64");
+        env.add("DM_VK_SPARSE_RES_MB=16");
+        env.add("DM_VK_ZSHARE=1");
+        env.add("DM_VK_ZSHARE_MB=1");
+        env.add("DM_VK_IMGMEM=1");
+        env.add("DM_VK_UPLOAD_BATCH_MB=32");
+        env.add("DM_VK_UPLOAD_INFLIGHT_MB=128");
+        env.add("DM_NUP_CACHE_MB=16");
+        env.add("DM_LONGFRAME=0");
+        env.add("DM_LONGFRAME_THREADS=0");
+        env.add("DM_VK_STATS=0");
+        if (Prefs.of(c).getBoolean("fp16", true)) {
+            env.add("TU_DEBUG=fp16");
+            env.add("FD_MESA_DEBUG=fp16");
+            env.add("DM_VK_FP16=1");
+        }
+        env.add("DM_VK_DOUBLE_BUFFER=" + (Prefs.of(c).getBoolean("double_buf", true) ? 1 : 0));
     }
 
     private static void push(Context c) {
@@ -64,5 +98,15 @@ final class Fsr {
         }
         g.setOnCheckedChangeListener((gr, id) -> { Prefs.of(c).edit().putFloat("fsr_sharp", SHARPS[id - 3000]).commit(); push(c); });
         box.addView(g);
+        CheckBox fp16 = new CheckBox(c);
+        fp16.setText("FP16 Fast Math (2x shader ALU speed & lower RAM register use)");
+        fp16.setChecked(Prefs.of(c).getBoolean("fp16", true));
+        fp16.setOnCheckedChangeListener((b, v) -> Prefs.of(c).edit().putBoolean("fp16", v).commit());
+        box.addView(fp16);
+        CheckBox dbuf = new CheckBox(c);
+        dbuf.setText("Double-Buffering Swapchain (saves VRAM & reduces input lag)");
+        dbuf.setChecked(Prefs.of(c).getBoolean("double_buf", true));
+        dbuf.setOnCheckedChangeListener((b, v) -> Prefs.of(c).edit().putBoolean("double_buf", v).commit());
+        box.addView(dbuf);
     }
 }

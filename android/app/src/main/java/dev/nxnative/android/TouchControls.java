@@ -90,6 +90,7 @@ final class TouchControls extends View {
 
     /** The game's picture in the view (normalized), as the replay letterboxes it: 16:9 at its full size, at (px, py) of the free space (0.5: centred) */
     static float[] picture(int w, int h, float px, float py) {
+        if (px < 0 || py < 0) return new float[] {0, 0, 1, 1};
         float pw = 1, ph = 1;
         if (w * 9f > h * 16f) pw = h * 16f / 9f / w; else ph = w * 9f / 16f / h;
         return new float[] {(1 - pw) * px, (1 - ph) * py, pw, ph};
@@ -264,7 +265,8 @@ final class TouchControls extends View {
     float picturePosition() { return placeY; }
     void setPicturePosition(float y) {
         if (prof == null) return;   // not laid out yet
-        placeY = Math.max(0, Math.min(1, y));
+        if (y < 0) { placeX = -1f; placeY = -1f; }
+        else { if (placeX < 0) placeX = 0.5f; placeY = Math.max(0, Math.min(1, y)); }
         relayout(); saveLayout();
         Native.note(String.format(java.util.Locale.ROOT, "picture placed at y %.2f of the free space on screen %s", placeY, prof));
     }
@@ -302,9 +304,9 @@ final class TouchControls extends View {
         t.setText("Picture position (this screen)");
         android.widget.RadioGroup rg = new android.widget.RadioGroup(ctx);
         rg.setOrientation(LinearLayout.HORIZONTAL);
-        String[] names = {"Top", "Centre", "Bottom"};
-        float[] at = {0, 0.5f, 1};
-        for (int i = 0; i < 3; i++) {
+        String[] names = {"Top", "Centre", "Bottom", "Stretch"};
+        float[] at = {0, 0.5f, 1, -1f};
+        for (int i = 0; i < 4; i++) {
             android.widget.RadioButton b = new android.widget.RadioButton(ctx);
             b.setText(names[i]); b.setId(View.generateViewId());
             rg.addView(b);

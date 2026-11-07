@@ -264,6 +264,12 @@ static uint64_t row_obj(const lock_t *L) {
 static int floor_max(const lock_t *L) {
     uint64_t obj = row_obj(L); int32_t mx;
     if (!obj || !rd(obj + L->field + 4, &mx, sizeof mx) || mx < 1 || mx > 60) return 0;
+    if (mx > 2) {   // Clamp sead controller maximum interval to 2 (30 FPS floor) to prevent 20 FPS hysteresis lock while preserving 60 FPS ceiling
+        mx = 2;
+        int32_t *p = (int32_t *)(uintptr_t)(obj + L->field + 4);
+        dm_guest_write_prepare(p, sizeof *p);
+        __atomic_store_n(p, mx, __ATOMIC_RELAXED);
+    }
     return mx;
 }
 // Whether a row can hold cap t: its kind's rates (rate_ok), and for a floor no more vsyncs than the controller's own maximum (while that is unknown, the write waits for it)
@@ -315,22 +321,22 @@ void dm_fps_lock_tick(void) {
             }
         }
         else for (int r = 0; r < nrow; r++) if (!rate_ok(rows[r]->kind, t)) LOG("main: %s cannot hold %d fps (whole vsyncs only): left as the game sets it (%s)", rows[r]->what, t, src);
-        target = t; start_cap = first && t;
+        target = t; start_cap = first;
         if (!first) for (int r = 0; r < NLOCKS + 3; r++) nlog[r] = over[r] = 0;
     }
-    if (!target) return;
     // The cap at start (DM_FPS_TARGET: the Android panel's saved cap, env.txt; or the profile) may be one this game cannot hold: 15 on Donkey Kong Bananza, whose controller goes to
     // 3 vsyncs at most. Once every floor's maximum is known, such a cap becomes 0, the game's own, so the front end and presentation show what the game really does
     if (start_cap) {
         int known = 1; for (int r = 0; r < nrow; r++) if (rows[r]->kind == MIN_VSYNCS_I32 && !floor_max(rows[r])) known = 0;
         if (known) {
             start_cap = 0;
-            if (!holds(target)) {
+            if (target && !holds(target)) {
                 LOG("main: frame rate cap %d fps (%s) is not one this game can hold: the game's own frame rate instead", target, src);
                 dm_fps_target_set(0, "a start cap this game cannot hold"); return;
             }
         }
     }
+    if (!target) return;
     if (nier && 60 % target == 0) {
         // NieR:Automata US/EU 1.0.3 (3c10ec35c5ef4c3686b4053afb0e58e7):
         // - [base + 0x192be00] points to the NVN graphics device object whose +0x9c160 holds the present interval (1 = 60 FPS, 2 = 30 FPS),

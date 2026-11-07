@@ -35,7 +35,7 @@ final class Lsfg {
     static boolean on(Context c) { return prefs(c).getBoolean("lsfg", false); }
     static int multiplier(Context c) { return prefs(c).getInt("lsfg_mult", 2); }
     static int target(Context c) { return prefs(c).getInt("lsfg_target", 0); }
-    static int flow(Context c) { return prefs(c).getInt("lsfg_flow", 75); }
+    static int flow(Context c) { return prefs(c).getInt("lsfg_flow", 50); }
 
     /** Where the DLL in use came from (for the main screen and the log) */
     static String note = "";
